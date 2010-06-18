@@ -7,13 +7,14 @@
   <author>Floris van Breugel</author>
   <license>BSD</license>
   <review status="unreviewed" notes=""/>
-  <url>http://ros.org/wiki/beginner_tutorials</url>
+  <url>http://github.com/florisvb/floris_ros_flydra</url>
   <depend package="std_msgs"/>
   <depend package="rospy"/>
   <depend package="roscpp"/>
   <depend package="sensor_msgs"/>
   <depend package="opencv2"/>
   <depend package="cv_bridge"/>
+  <depend package="ros_flydra"/>
   
 
 </package>
