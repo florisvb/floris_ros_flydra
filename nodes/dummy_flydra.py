@@ -9,7 +9,7 @@ import time
 from optparse import OptionParser
 pi = np.pi
 
-# create a dummy mainbrain with arbitrary number of flies, flies are born and killed, and move around
+# create a dummy mainbrain with arbitrary number of objects, objects are born and killed, and move around
 
 class DummyMainbrain:
 
@@ -104,17 +104,6 @@ class DummyObject:
         posvel_covariance_diagonal = [0 for i in range(6)]
         
         return self.obj_id, position, velocity, posvel_covariance_diagonal
-
-
-
-########### dummy reprojection ###############
-def reproject(fly_pos, screensize = [640,480]):
-
-    xpos = int(np.abs(fly_pos[0]/2.*screensize[0]))
-    ypos = int(np.abs(fly_pos[1]/2.*screensize[1]))
-
-    return xpos, ypos
-
 
 ########### run as mainbrain node #############
 if __name__ == '__main__':
