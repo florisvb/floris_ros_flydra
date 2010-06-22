@@ -4,16 +4,24 @@ import rospy
 from ros_flydra.msg import *
 import time
 
-def callback(data):
-    msg_sent = data.data[0]+data.data[1]
-    msg_recieved = time.time()
-    print 'latency: ', msg_recieved-msg_sent
 
-def listener():
-    rospy.init_node('listener', anonymous=True)
-    rospy.Subscriber("chatter", Float64Arr, callback)
-    rospy.spin()
+class Listener:
+    def __init__(self):
+        
+        rospy.Subscriber("flydra_mainbrain_super_packets", flydra_mainbrain_super_packet, self.callback)
+        rospy.init_node('listener', anonymous=True)
+        rospy.spin()
+
+    def callback(self, super_packet):
+        print 'super packet, ', len(super_packet.packets), ' packets'
+        now = time.time()
+        for packet in super_packet.packets:
+            print now-packet.acquire_timestamp
+            print now-packet.reconstruction_timestamp
+            
+        #self.packets = super_packet.packets
+    
 
 if __name__ == '__main__':
-    listener()
+    listener = Listener()
 
