@@ -14,7 +14,6 @@ import cvNumpy
 
 from sensor_msgs.msg import Image
 from ros_flydra.msg import *
-from std_msgs.msg import String
 from cv_bridge import CvBridge, CvBridgeError
 
 import DummyFlydra
@@ -70,7 +69,7 @@ class ImageDisplay:
         sub_name = 'camera_' + str(self.device_num)
         rospy.Subscriber(sub_name,Image,self.image_callback)
         rospy.Subscriber("flydra_data", flydra_packet, self.flydra_callback)
-        self.pub_pref_obj_id = rospy.Publisher('flydra_pref_obj_id', String)
+        self.pub_pref_obj_id = rospy.Publisher('flydra_pref_obj_id', uint32)
         node_name = 'image_display' + str(self.device_num)
         rospy.init_node(node_name, anonymous=True)
 
@@ -141,7 +140,7 @@ class ImageDisplay:
             
     def set_pref_obj_id(self, obj_id):
         self.pref_obj_id = obj_id
-        self.pub_pref_obj_id.publish(String(self.pref_obj_id))
+        self.pub_pref_obj_id.publish(uint32(self.pref_obj_id))
         print 'new pref obj id! ', obj_id
         return
 
