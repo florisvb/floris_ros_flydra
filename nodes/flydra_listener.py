@@ -16,8 +16,8 @@ class Listener:
         print 'super packet, ', len(super_packet.packets), ' packets'
         now = time.time()
         for packet in super_packet.packets:
-            print now-packet.acquire_timestamp
-            print now-packet.reconstruction_timestamp
+            print now-packet.acquire_stamp.to_seconds()
+            print now-packet.reconstruction_stamp.to_seconds()
             
         #self.packets = super_packet.packets
     
