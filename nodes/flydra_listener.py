@@ -16,8 +16,15 @@ class Listener:
         print 'super packet, ', len(super_packet.packets), ' packets'
         now = time.time()
         for packet in super_packet.packets:
+            print
+            print '*'*80
             print now-packet.acquire_stamp.to_seconds()
-            print now-packet.reconstruction_stamp.to_seconds()
+            for obj in packet.objects:
+                position = [obj.position.x, obj.position.y, obj.position.z]
+                velocity = [obj.velocity.x, obj.velocity.y, obj.velocity.z]
+                print
+                print position
+                print velocity
             
         #self.packets = super_packet.packets
     
