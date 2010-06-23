@@ -14,14 +14,15 @@ import cvNumpy
 
 from sensor_msgs.msg import Image
 from ros_flydra.msg import *
+from std_msgs.msg import *
+from geometry_msgs.msg import Point
 from cv_bridge import CvBridge, CvBridgeError
 
 import DummyFlydra
 
-
 # instructions:
 # run these nodes:
-# flydra_repeater (either mainbrain, or dummy needs to be on), firefly_capture
+# flydra_mainbrain or dummy_flydra, firefly_capture
 
 # gui controls:
 # left click: select nearest object id
@@ -50,7 +51,7 @@ class ImageDisplay:
         self.color = color
 
         self.dummy = True
-        self.flies = []
+        self.objects = []
         self.obj_ids = None
         self.pref_obj_id = None
         self.trigger_rectangle = None
@@ -61,15 +62,21 @@ class ImageDisplay:
 
         self.mousex = None
         self.mousey = None
+        self.motor_pos_2d = None
         self.choose_object = False
+        self.ptf_3d = None
 
         self.trigger_distance = None
 
         self.device_num = device_num
         sub_name = 'camera_' + str(self.device_num)
+        
         rospy.Subscriber(sub_name,Image,self.image_callback)
-        rospy.Subscriber("flydra_data", flydra_packet, self.flydra_callback)
-        self.pub_pref_obj_id = rospy.Publisher('flydra_pref_obj_id', uint32)
+        rospy.Subscriber("flydra_mainbrain_super_packets", flydra_mainbrain_super_packet, self.flydra_callback)
+        rospy.Subscriber("ptf_3d", Point, self.ptf_3d_callback)
+        
+        self.pub_pref_obj_id = rospy.Publisher('flydra_pref_obj_id', UInt32)
+        
         node_name = 'image_display' + str(self.device_num)
         rospy.init_node(node_name, anonymous=True)
 
@@ -107,6 +114,14 @@ class ImageDisplay:
             self.trigger_distance[1] = (x,self.dist_scale_y+5)
             self.dist_world_max = self.pixel_to_dist(x)
             
+        # motor control trigger movement
+        if flags == cv.CV_EVENT_FLAG_ALTKEY:
+            f = 2
+            self.motor_pos_2d = [x,y,f]
+
+    def ptf_3d_callback(self, data):
+        self.ptf_3d = [data.x, data.y, data.z]            
+            
     def load_parameters(self):
 
         # distance scale stuff:
@@ -131,16 +146,17 @@ class ImageDisplay:
         self.trigger_distance = None
         self.load_parameters()
 
-    def flydra_callback(self, data):
-        self.flies = data.flies        
-        self.obj_ids = [fly.obj_id for fly in self.flies]
+    def flydra_callback(self, super_packet):
+        for packet in super_packet.packets:
+            self.objects = packet.objects        
+        self.obj_ids = [obj.obj_id for obj in self.objects]
         if self.pref_obj_id not in self.obj_ids and self.pref_obj_id is not None:
             self.set_pref_obj_id(None)
             print 'lost the preferred fly! please select a new one... (mouseclick)'
             
     def set_pref_obj_id(self, obj_id):
         self.pref_obj_id = obj_id
-        self.pub_pref_obj_id.publish(uint32(self.pref_obj_id))
+        self.pub_pref_obj_id.publish(UInt32(self.pref_obj_id))
         print 'new pref obj id! ', obj_id
         return
 
@@ -156,7 +172,7 @@ class ImageDisplay:
                 if self.pref_obj_id is not None:
                     index = self.obj_ids.index(self.pref_obj_id)
                     new_index = index+1
-                    if index+1 > len(self.flies)-1:
+                    if index+1 > len(self.objects)-1:
                         new_index = 0
                     self.set_pref_obj_id(self.obj_ids[new_index])
                     print 'chose a new pref_obj_id: ', self.pref_obj_id
@@ -210,15 +226,16 @@ class ImageDisplay:
         cv.PutText(cv_image, pref_obj_id, (0, 35), font, color_green)
 
         # draw the flies    
-        if len(self.flies) is not None:
+        if len(self.objects) is not None:
             if self.choose_object:
                 opt_dist = 1000 # initialization for finding nearest fly
                 choose_fly =  self.obj_ids[0] # initialization for nearest fly
-            for fly in self.flies:
+            for fly in self.objects:
                 # reproject fly onto camera... 
                 if self.dummy:
-                    xpos, ypos = DummyFlydra.reproject(fly.state_vecs[0:3])
-                    dist = linalg.norm(fly.state_vecs[0:3])
+                    pos = [fly.position.x, fly.position.y, fly.position.z]
+                    xpos, ypos = DummyFlydra.reproject(pos)
+                    dist = linalg.norm(pos)
 
                 # if xpos, ypos inside rectangle set pref obj id
                 if self.trigger_rectangle is not None and self.pref_obj_id is None:
@@ -276,6 +293,12 @@ class ImageDisplay:
         # trigger distance rectangle:
         if self.trigger_distance is not None:
             cv.Rectangle(cv_image, self.trigger_distance[0], self.trigger_distance[1], color_red, thickness=1)
+            
+        # PTF position
+        if self.ptf_3d is not None:
+            if self.dummy:
+                xpos, ypos = DummyFlydra.reproject(self.ptf_3d)
+            cv.Circle(cv_image, (xpos,ypos), 2, color_red, thickness=2)     
             
 
         
