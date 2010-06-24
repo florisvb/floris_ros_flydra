@@ -22,7 +22,7 @@ from cv_bridge import CvBridge, CvBridgeError
 
 class Camera:
     def __init__(self, mode_num=4, framerate=30, device_num=0, num_buffers=32, color=True, bayer='RG'):
-
+                            
         # initialize firefly camera using Andrew Straw's motmot.cam_iface
         self.mode_num = mode_num
         self.device_num = device_num
@@ -32,6 +32,7 @@ class Camera:
         time.sleep(1) # to help reduce corrupt frames
         self.cam.set_framerate(framerate)
         self.fps = self.cam.get_framerate()
+        print 'framerate: ', self.fps
         self.color = color
         self.bayer = bayer # choices are RG, GR, BG, GB
 
