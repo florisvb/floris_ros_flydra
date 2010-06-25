@@ -46,6 +46,10 @@ class ImageDisplay:
         
         # ps3 controller parameters:
         self.cursorgain = 0.03
+        
+        # camera parameters:
+        self.field_of_view = np.pi*1.5 # field of view of GUI camera in radians
+        self.ptf_field_of_view = np.pi*0.08 # field of view of the camera on the PTF system
 
         ############################################
     
@@ -126,43 +130,44 @@ class ImageDisplay:
     def ps3_callback(self, ps3values):
 
         # left joystick: move cursor
-        self.cursor = self.cursor + np.array([ps3values.joyleft_x, ps3values.joyleft_y])*self.cursorgain
-        for i in range(2):
-            if self.cursor[i] > 1: self.cursor[i] = 1
-            if self.cursor[i] < 0: self.cursor[i] = 0
-            
-        # x button: mouse left click
-        if ps3values.x:
-            self.mouse(cv.CV_EVENT_LBUTTONUP, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
-    
-        # square button: draw selection box: mouse right click and drag
-        if ps3values.square is True:
-            if self.square is False:
-                self.mouse(cv.CV_EVENT_RBUTTONDOWN, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
-                self.square = True
-            if self.square is True:
-                self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_RBUTTON, None)
-        if ps3values.square is False:
-            if self.square is True:
-                self.mouse(cv.CV_EVENT_RBUTTONUP, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
-                self.square = False
+        if ps3values.L2 > 0.99:
+            self.cursor = self.cursor + np.array([ps3values.joyleft_x, ps3values.joyleft_y])*self.cursorgain
+            for i in range(2):
+                if self.cursor[i] > 1: self.cursor[i] = 1
+                if self.cursor[i] < 0: self.cursor[i] = 0
                 
-        # start button: clear selections: mouse middle button up
-        if ps3values.start is True:
-            self.mouse(cv.CV_EVENT_MBUTTONUP, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
-            
-            
-        # circle button: distance trigger rectangle
-        if ps3values.circle is True:
-            if self.circle is False:
-                self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_CTRLKEY, None)
-                self.circle = True
-            if self.circle is True:
-                self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_SHIFTKEY, None)
-        if ps3values.circle is False:
-            if self.circle is True:
-                self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_SHIFTKEY, None)
-                self.circle = False
+            # x button: mouse left click
+            if ps3values.x:
+                self.mouse(cv.CV_EVENT_LBUTTONUP, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
+        
+            # square button: draw selection box: mouse right click and drag
+            if ps3values.square is True:
+                if self.square is False:
+                    self.mouse(cv.CV_EVENT_RBUTTONDOWN, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
+                    self.square = True
+                if self.square is True:
+                    self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_RBUTTON, None)
+            if ps3values.square is False:
+                if self.square is True:
+                    self.mouse(cv.CV_EVENT_RBUTTONUP, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
+                    self.square = False
+                    
+            # start button: clear selections: mouse middle button up
+            if ps3values.start is True:
+                self.mouse(cv.CV_EVENT_MBUTTONUP, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
+                
+                
+            # circle button: distance trigger rectangle
+            if ps3values.circle is True:
+                if self.circle is False:
+                    self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_CTRLKEY, None)
+                    self.circle = True
+                if self.circle is True:
+                    self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_SHIFTKEY, None)
+            if ps3values.circle is False:
+                if self.circle is True:
+                    self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_SHIFTKEY, None)
+                    self.circle = False
             
             
     def ptf_3d_callback(self, data):
