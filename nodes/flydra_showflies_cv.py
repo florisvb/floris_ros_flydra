@@ -15,6 +15,7 @@ import cvNumpy
 from sensor_msgs.msg import Image
 from ros_flydra.msg import *
 from std_msgs.msg import *
+from joystick_ps3.msg import ps3values
 from geometry_msgs.msg import Point
 from cv_bridge import CvBridge, CvBridgeError
 
@@ -42,6 +43,9 @@ class ImageDisplay:
         self.dist_scale_max = 20.
         self.dist_scale_units = 'm'
         #
+        
+        # ps3 controller parameters:
+        self.cursorgain = 0.03
 
         ############################################
     
@@ -59,6 +63,10 @@ class ImageDisplay:
 
         self.width = 100
         self.height = 100
+        
+        self.cursor = np.array([0.5,0.5]) # keep between 0 and 1
+        self.square = False
+        self.circle = False
 
         self.mousex = None
         self.mousey = None
@@ -74,6 +82,7 @@ class ImageDisplay:
         rospy.Subscriber(sub_name,Image,self.image_callback)
         rospy.Subscriber("flydra_mainbrain_super_packets", flydra_mainbrain_super_packet, self.flydra_callback)
         rospy.Subscriber("ptf_3d", Point, self.ptf_3d_callback)
+        rospy.Subscriber("ps3_interpreter", ps3values, self.ps3_callback)
         
         self.pub_pref_obj_id = rospy.Publisher('flydra_pref_obj_id', UInt32)
         
@@ -114,11 +123,48 @@ class ImageDisplay:
             self.trigger_distance[1] = (x,self.dist_scale_y+5)
             self.dist_world_max = self.pixel_to_dist(x)
             
-        # motor control trigger movement
-        if flags == cv.CV_EVENT_FLAG_ALTKEY:
-            f = 2
-            self.motor_pos_2d = [x,y,f]
+    def ps3_callback(self, ps3values):
 
+        # left joystick: move cursor
+        self.cursor = self.cursor + np.array([ps3values.joyleft_x, ps3values.joyleft_y])*self.cursorgain
+        for i in range(2):
+            if self.cursor[i] > 1: self.cursor[i] = 1
+            if self.cursor[i] < 0: self.cursor[i] = 0
+            
+        # x button: mouse left click
+        if ps3values.x:
+            self.mouse(cv.CV_EVENT_LBUTTONUP, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
+    
+        # square button: draw selection box: mouse right click and drag
+        if ps3values.square is True:
+            if self.square is False:
+                self.mouse(cv.CV_EVENT_RBUTTONDOWN, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
+                self.square = True
+            if self.square is True:
+                self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_RBUTTON, None)
+        if ps3values.square is False:
+            if self.square is True:
+                self.mouse(cv.CV_EVENT_RBUTTONUP, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
+                self.square = False
+                
+        # start button: clear selections: mouse middle button up
+        if ps3values.start is True:
+            self.mouse(cv.CV_EVENT_MBUTTONUP, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
+            
+            
+        # circle button: distance trigger rectangle
+        if ps3values.circle is True:
+            if self.circle is False:
+                self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_CTRLKEY, None)
+                self.circle = True
+            if self.circle is True:
+                self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_SHIFTKEY, None)
+        if ps3values.circle is False:
+            if self.circle is True:
+                self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_SHIFTKEY, None)
+                self.circle = False
+            
+            
     def ptf_3d_callback(self, data):
         self.ptf_3d = [data.x, data.y, data.z]            
             
@@ -224,9 +270,12 @@ class ImageDisplay:
         cv.PutText(cv_image, existing_objs, (0, 15), font, color_green)
         pref_obj_id = 'pref obj id: ' + str(self.pref_obj_id)
         cv.PutText(cv_image, pref_obj_id, (0, 35), font, color_green)
+        
+        # draw cursor:
+        cv.Circle(cv_image, (int(self.cursor[0]*self.width),int(self.cursor[1]*self.height)), 2, color_red, thickness=2)
 
         # draw the flies    
-        if len(self.objects) is not None:
+        if len(self.objects) > 0:
             if self.choose_object:
                 opt_dist = 1000 # initialization for finding nearest fly
                 choose_fly =  self.obj_ids[0] # initialization for nearest fly
@@ -298,8 +347,15 @@ class ImageDisplay:
         if self.ptf_3d is not None:
             if self.dummy:
                 xpos, ypos = DummyFlydra.reproject(self.ptf_3d)
+                
+                ptf_3d_plus_focus = [self.ptf_3d[0], self.ptf_3d[1], self.dist_world_max]
+                xpf, ypf = DummyFlydra.reproject(ptf_3d_plus_focus)
+                
+                ptf_3d_minus_focus = [self.ptf_3d[0], self.ptf_3d[1], self.dist_world_min]
+                xmf, ymf = DummyFlydra.reproject(ptf_3d_minus_focus)
             cv.Circle(cv_image, (xpos,ypos), 2, color_red, thickness=2)     
-            
+            cv.Line(cv_image, (xmf, ymf), (xpf, ypf), color_red, thickness=1)
+            print xmf, xpf
 
         
 
