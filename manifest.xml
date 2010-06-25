@@ -15,7 +15,7 @@
   <depend package="opencv2"/>
   <depend package="cv_bridge"/>
   <depend package="ros_flydra"/>
-  
+  <depend package="joystick_ps3"/>
 
 </package>
 
