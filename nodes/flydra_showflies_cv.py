@@ -46,11 +46,27 @@ class ImageDisplay:
         
         # ps3 controller parameters:
         self.cursorgain = 0.03
+        self.ptf_home = [0,0,0]
         
-        # camera parameters:
-        self.field_of_view = np.pi*1.5 # field of view of GUI camera in radians
-        self.ptf_field_of_view = np.pi*0.08 # field of view of the camera on the PTF system
-
+        # camera parameters - field of view, width and height:
+        self.field_of_view_w = np.pi*1.5 # field of view of GUI camera in radians
+        self.ptf_field_of_view_w = np.pi*0.08 # field of view of the camera on the PTF system
+        self.field_of_view_h = np.pi*1.5 # field of view of GUI camera in radians
+        self.ptf_field_of_view_h = np.pi*0.08 # field of view of the camera on the PTF system
+        
+        # display parameters:
+        # text fonts
+        self.font = cv.InitFont(cv.CV_FONT_HERSHEY_TRIPLEX,0.5,0.5)
+        self.small_font = cv.InitFont(cv.CV_FONT_HERSHEY_TRIPLEX,0.4,0.4)
+        self.color_green = cv.Scalar(0,255,0,0)
+        self.color_light_green = cv.Scalar(175,255,175,0)
+        self.color_red = cv.Scalar(0,0,255,0)
+        self.color_blue = cv.Scalar(255,0,0,0)
+        self.color_purple = cv.Scalar(255,0,255,0)
+        self.color_white = cv.Scalar(255,255,255,0)
+        self.color_black = cv.Scalar(0,0,0,0)
+        # puttext puts lower left letter at (x,y) 
+        
         ############################################
     
         cv.NamedWindow("Display",1)
@@ -86,6 +102,7 @@ class ImageDisplay:
         rospy.Subscriber(sub_name,Image,self.image_callback)
         rospy.Subscriber("flydra_mainbrain_super_packets", flydra_mainbrain_super_packet, self.flydra_callback)
         rospy.Subscriber("ptf_3d", Point, self.ptf_3d_callback)
+        rospy.Subscriber("ptf_home", Point, self.ptf_home_callback)
         rospy.Subscriber("ps3_interpreter", ps3values, self.ps3_callback)
         
         self.pub_pref_obj_id = rospy.Publisher('flydra_pref_obj_id', UInt32)
@@ -171,7 +188,10 @@ class ImageDisplay:
             
             
     def ptf_3d_callback(self, data):
-        self.ptf_3d = [data.x, data.y, data.z]            
+        self.ptf_3d = [data.x, data.y, data.z]       
+        
+    def ptf_home_callback(self,data):
+         self.ptf_home = [data.x, data.y, data.z]      
             
     def load_parameters(self):
 
@@ -185,6 +205,9 @@ class ImageDisplay:
         self.dist_scale_factor = (self.dist_scale_max - self.dist_scale_min) / (self.dist_scale_x2 - self.dist_scale_x1)
         self.dist_world_min = self.dist_scale_min
         self.dist_world_max = self.dist_scale_max
+        
+        self.ptf_fov_in_gui_w = int(np.sin(self.ptf_field_of_view_w/2) / np.sin(self.field_of_view_w/2) * self.width)
+        self.ptf_fov_in_gui_h = int(np.sin(self.ptf_field_of_view_h/2) / np.sin(self.field_of_view_h/2) * self.height)
 
         self.parameters_loaded = True
 
@@ -261,24 +284,20 @@ class ImageDisplay:
         ##########################################################
         # Drawing Functions go here, operate on cv_image
 
-        # text fonts
-        font = cv.InitFont(cv.CV_FONT_HERSHEY_TRIPLEX,0.5,0.5)
-        small_font = cv.InitFont(cv.CV_FONT_HERSHEY_TRIPLEX,0.4,0.4)
-        color_green = cv.Scalar(0,255,0,0)
-        color_light_green = cv.Scalar(175,255,175,0)
-        color_red = cv.Scalar(0,0,255,0)
-        color_white = cv.Scalar(255,255,255,0)
-        # puttext puts lower left letter at (x,y) 
-
         # print some basic (static) information
         existing_objs = 'existing objects: ' + str(self.obj_ids)
-        cv.PutText(cv_image, existing_objs, (0, 15), font, color_green)
+        cv.PutText(cv_image, existing_objs, (0, 15), self.font, self.color_green)
         pref_obj_id = 'pref obj id: ' + str(self.pref_obj_id)
-        cv.PutText(cv_image, pref_obj_id, (0, 35), font, color_green)
+        cv.PutText(cv_image, pref_obj_id, (0, 35), self.font, self.color_green)
         
-        # draw cursor:
-        cv.Circle(cv_image, (int(self.cursor[0]*self.width),int(self.cursor[1]*self.height)), 2, color_red, thickness=2)
-
+        # black background for focus bar
+        cv.Rectangle(cv_image, (0,self.height-40), (self.width, self.height), self.color_black, thickness=-1)
+        
+        # ptf home position
+        xpos = int(self.ptf_home[0]*self.width)
+        ypos = int(self.ptf_home[1]*self.height)
+        cv.Circle(cv_image, (xpos,ypos), 2, self.color_blue, thickness=2)
+        
         # draw the flies    
         if len(self.objects) > 0:
             if self.choose_object:
@@ -301,20 +320,20 @@ class ImageDisplay:
                 # if objects out of range, use light green
                 if dist <= self.dist_world_max and dist >= self.dist_world_min:
                     # obj_id text
-                    cv.PutText(cv_image, str(fly.obj_id), (xpos, ypos), font, color_green) 
+                    cv.PutText(cv_image, str(fly.obj_id), (xpos, ypos), self.font, self.color_green) 
                     # distance text
-                    cv.PutText(cv_image, str(dist)[0:4], (xpos, ypos+10), small_font, color_green)
+                    cv.PutText(cv_image, str(dist)[0:4], (xpos, ypos+10), self.small_font, self.color_green)
                 else:
                     # obj_id text
-                    cv.PutText(cv_image, str(fly.obj_id), (xpos, ypos), font, color_light_green) 
+                    cv.PutText(cv_image, str(fly.obj_id), (xpos, ypos), self.font, self.color_light_green) 
                     # distance text
-                    cv.PutText(cv_image, str(dist)[0:4], (xpos, ypos+10), small_font, color_light_green)
+                    cv.PutText(cv_image, str(dist)[0:4], (xpos, ypos+10), self.small_font, self.color_light_green)
                 
                 if fly.obj_id == self.pref_obj_id:
                     cx = xpos+len(str(fly.obj_id))*5
                     cy = ypos-5
                     radius = len(str(fly.obj_id))*5+5
-                    cv.Circle(cv_image, (cx,cy), radius, color_red, thickness=1)       
+                    cv.Circle(cv_image, (cx,cy), radius, self.color_red, thickness=1)       
 
                 # choose nearest object to last mouse click 
                 if self.choose_object:
@@ -328,29 +347,30 @@ class ImageDisplay:
                 self.choose_object = False              
         
 
-        # draw the rectangle:
+        # trigger rectangle:
         if self.trigger_rectangle is not None:
-            cv.Rectangle(cv_image, self.trigger_rectangle[0], self.trigger_rectangle[1], color_red, thickness=1)
+            cv.Rectangle(cv_image, self.trigger_rectangle[0], self.trigger_rectangle[1], self.color_blue, thickness=1)
 
         # distance scale:
-        cv.Line(cv_image, (self.dist_scale_x1,self.dist_scale_y), (self.dist_scale_x2,self.dist_scale_y), color_white, thickness=2)
+        cv.Line(cv_image, (self.dist_scale_x1,self.dist_scale_y), (self.dist_scale_x2,self.dist_scale_y), self.color_white, thickness=2)
         dist_str = 'dist from cam, ' + self.dist_scale_units
-        cv.PutText(cv_image, dist_str, (self.dist_scale_x1,self.dist_scale_y+15), small_font, color_white)
+        cv.PutText(cv_image, dist_str, (self.dist_scale_x1,self.dist_scale_y+15), self.small_font, self.color_white)
         for n in range(self.dist_scale_nticks+1):
             y1 = self.dist_scale_y+5
             y2 = self.dist_scale_y-5
             x = self.dist_scale_x1+self.dist_scale_tick_interval*n
             dist = self.dist_scale_min+self.dist_scale_interval*n
-            cv.Line(cv_image, (x,y1), (x,y2), color_white, thickness=2)
-            cv.PutText(cv_image, str(dist)[0:4], (x,y2), small_font, color_white)
+            cv.Line(cv_image, (x,y1), (x,y2), self.color_white, thickness=2)
+            cv.PutText(cv_image, str(dist)[0:4], (x,y2), self.small_font, self.color_white)
 
         # trigger distance rectangle:
         if self.trigger_distance is not None:
-            cv.Rectangle(cv_image, self.trigger_distance[0], self.trigger_distance[1], color_red, thickness=1)
+            cv.Rectangle(cv_image, self.trigger_distance[0], self.trigger_distance[1], self.color_blue, thickness=1)
             
         # PTF position
         if self.ptf_3d is not None:
             if self.dummy:
+                print self.ptf_3d
                 xpos, ypos = DummyFlydra.reproject(self.ptf_3d)
                 
                 ptf_3d_plus_focus = [self.ptf_3d[0], self.ptf_3d[1], self.dist_world_max]
@@ -358,11 +378,20 @@ class ImageDisplay:
                 
                 ptf_3d_minus_focus = [self.ptf_3d[0], self.ptf_3d[1], self.dist_world_min]
                 xmf, ymf = DummyFlydra.reproject(ptf_3d_minus_focus)
-            cv.Circle(cv_image, (xpos,ypos), 2, color_red, thickness=2)     
-            cv.Line(cv_image, (xmf, ymf), (xpf, ypf), color_red, thickness=1)
-            print xmf, xpf
+            cv.Circle(cv_image, (int(xpos),int(ypos)), 2, self.color_red, thickness=2)     
+            cv.Line(cv_image, (int(xmf), int(ymf)), (int(xpf), int(ypf)), self.color_red, thickness=1)
+            #print xmf, xpf
+            
+            UL = (xpos-self.ptf_fov_in_gui_w, ypos-self.ptf_fov_in_gui_h)
+            LR = (xpos+self.ptf_fov_in_gui_w, ypos+self.ptf_fov_in_gui_h)
+            cv.Rectangle(cv_image, UL, LR, self.color_red, thickness=1)
 
-        
+        # draw cursor:
+        xpos = int(self.cursor[0]*self.width)
+        ypos = int(self.cursor[1]*self.height)
+        cv.Circle(cv_image, (xpos,ypos), 2, self.color_purple, thickness=2)
+        cv.Line(cv_image, (xpos-10, ypos), (xpos+10,ypos), self.color_purple, thickness=1)
+        cv.Line(cv_image, (xpos, ypos-10), (xpos,ypos+10), self.color_purple, thickness=1)
 
         ##########################################################
         cv.ShowImage("Display", cv_image)
