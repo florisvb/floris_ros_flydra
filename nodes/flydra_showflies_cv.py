@@ -15,7 +15,7 @@ import cvNumpy
 from sensor_msgs.msg import Image
 from ros_flydra.msg import *
 from std_msgs.msg import *
-from joystick_ps3.msg import ps3values
+from ps3_interpreter.msg import ps3values
 from geometry_msgs.msg import Point
 from cv_bridge import CvBridge, CvBridgeError
 
