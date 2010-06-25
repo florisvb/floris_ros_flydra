@@ -130,7 +130,7 @@ class ImageDisplay:
     def ps3_callback(self, ps3values):
 
         # left joystick: move cursor
-        if ps3values.L2 > 0.99:
+        if ps3values.L2 > 0.99 and ps3values.R2 > 0.99:
             self.cursor = self.cursor + np.array([ps3values.joyleft_x, ps3values.joyleft_y])*self.cursorgain
             for i in range(2):
                 if self.cursor[i] > 1: self.cursor[i] = 1
