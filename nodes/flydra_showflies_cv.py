@@ -11,6 +11,7 @@ import scipy.linalg as linalg
 import cv
 import motmot.cam_iface.cam_iface_ctypes as cam_iface
 import cvNumpy
+from optparse import OptionParser
 
 from sensor_msgs.msg import Image
 from ros_flydra.msg import *
@@ -145,7 +146,7 @@ class ImageDisplay:
             self.dist_world_max = self.pixel_to_dist(x)
             
     def ps3_callback(self, ps3values):
-
+    
         # left joystick: move cursor
         if ps3values.L2 > 0.99 and ps3values.R2 > 0.99:
             self.cursor = self.cursor + np.array([ps3values.joyleft_x, ps3values.joyleft_y])*self.cursorgain
@@ -380,7 +381,7 @@ class ImageDisplay:
                 xmf, ymf = DummyFlydra.reproject(ptf_3d_minus_focus)
             cv.Circle(cv_image, (int(xpos),int(ypos)), 2, self.color_red, thickness=2)     
             cv.Line(cv_image, (int(xmf), int(ymf)), (int(xpf), int(ypf)), self.color_red, thickness=1)
-            #print xmf, xpf
+            print xmf, xpf
             
             UL = (xpos-self.ptf_fov_in_gui_w, ypos-self.ptf_fov_in_gui_h)
             LR = (xpos+self.ptf_fov_in_gui_w, ypos+self.ptf_fov_in_gui_h)
@@ -406,5 +407,10 @@ class ImageDisplay:
 
 if __name__ == '__main__':
 
-    im = ImageDisplay()
+    parser = OptionParser()
+    parser.add_option("--device-num", type="int", dest="device_num", default=0,
+                        help="camera device number")
+    (options, args) = parser.parse_args()
+
+    im = ImageDisplay(device_num=options.device_num)
     im.run()
