@@ -4,6 +4,8 @@ import rospy
 
 import sys
 sys.path.append("/home/floris/src/floris")
+sys.path.append("/home/floris/src/flydra/flydra")
+sys.path.append("/home/floris/ros/stacks/ros_hydra/nodes")
 
 import time
 import numpy as np
@@ -21,6 +23,9 @@ from geometry_msgs.msg import Point
 from cv_bridge import CvBridge, CvBridgeError
 
 import DummyFlydra
+import reconstruct
+
+import pan_tilt_focus
 
 # instructions:
 # run these nodes:
@@ -32,10 +37,13 @@ import DummyFlydra
 # hit control while moving mouse, followed by shift: select distance range
 # middle mouse button: clear all selections
 
+## TO DO ##
+# currently in fly position the distance is the distance to flydra - not the ptf camera
+
 
 class ImageDisplay:
 
-    def __init__(self, device_num=0, color=True):
+    def __init__(self, device_num=0, color=True, calibration_filename=None, dummy=True):
 
         ## values that should be function inputs ##
         
@@ -54,6 +62,17 @@ class ImageDisplay:
         self.ptf_field_of_view_w = np.pi*0.08 # field of view of the camera on the PTF system
         self.field_of_view_h = np.pi*1.5 # field of view of GUI camera in radians
         self.ptf_field_of_view_h = np.pi*0.08 # field of view of the camera on the PTF system
+        self.camera_center = [0,0,0]
+        
+        # camera calibration:
+        self.dummy = dummy
+        if self.dummy is not None:
+            if calibration_filename is not None:
+                self.camera_calibration = reconstruct.Reconstructor(calibration_filename)
+                self.cam_id = self.camera_calibration.get_cam_ids()[0]
+            if calibration_filename is None:
+                print 'WARNING: running with a dummy calibration, please enter a calibration_filename'
+                self.dummy = True
         
         # display parameters:
         # text fonts
@@ -75,7 +94,6 @@ class ImageDisplay:
         self.bridge = CvBridge()
         self.color = color
 
-        self.dummy = True
         self.objects = []
         self.obj_ids = None
         self.pref_obj_id = None
@@ -105,6 +123,7 @@ class ImageDisplay:
         rospy.Subscriber("ptf_3d", Point, self.ptf_3d_callback)
         rospy.Subscriber("ptf_home", Point, self.ptf_home_callback)
         rospy.Subscriber("ps3_interpreter", ps3values, self.ps3_callback)
+        rospy.Subscriber("camera_center", Point, self.camera_center_callback)
         
         self.pub_pref_obj_id = rospy.Publisher('flydra_pref_obj_id', UInt32)
         
@@ -193,6 +212,9 @@ class ImageDisplay:
         
     def ptf_home_callback(self,data):
          self.ptf_home = [data.x, data.y, data.z]      
+         
+    def camera_center_callback(self, data):
+        self.camera_center = [data.x, data.y, data.z]      
             
     def load_parameters(self):
 
@@ -203,17 +225,24 @@ class ImageDisplay:
         self.dist_scale_nticks = 10
         self.dist_scale_tick_interval = int((self.dist_scale_x2 - self.dist_scale_x1)/self.dist_scale_nticks)
         self.dist_scale_interval = (self.dist_scale_max-self.dist_scale_min)/self.dist_scale_nticks
-        self.dist_scale_factor = (self.dist_scale_max - self.dist_scale_min) / (self.dist_scale_x2 - self.dist_scale_x1)
+        self.dist_scale_factor = (self.dist_scale_max - self.dist_scale_min) / (self.dist_scale_x2 - self.dist_scale_x1) # meters/pixel
         self.dist_world_min = self.dist_scale_min
         self.dist_world_max = self.dist_scale_max
         
         self.ptf_fov_in_gui_w = int(np.sin(self.ptf_field_of_view_w/2) / np.sin(self.field_of_view_w/2) * self.width)
         self.ptf_fov_in_gui_h = int(np.sin(self.ptf_field_of_view_h/2) / np.sin(self.field_of_view_h/2) * self.height)
 
-        self.parameters_loaded = True
+        self.parameters_loaded = True        
+        
+    def dist_to_pixel(self,dist):
+        print 'dist to pixel: '
+        print dist, self.dist_scale_min, self.dist_scale_factor, self.dist_scale_x1
+        return ( (dist-self.dist_scale_min)/self.dist_scale_factor + self.dist_scale_x1)
 
     def pixel_to_dist(self, pix):
-        return (pix - self.dist_scale_x1)*self.dist_scale_factor+self.dist_scale_min
+        dist = (pix - self.dist_scale_x1)*self.dist_scale_factor+self.dist_scale_min
+        print dist
+        return dist
 
     def clear(self):
         self.trigger_rectangle = None
@@ -310,6 +339,12 @@ class ImageDisplay:
                     pos = [fly.position.x, fly.position.y, fly.position.z]
                     xpos, ypos = DummyFlydra.reproject(pos)
                     dist = linalg.norm(pos)
+                if not self.dummy:
+                    pos = [fly.position.x, fly.position.y, fly.position.z]
+                    xpos, ypos = self.camera_calibration.find2d(self.cam_id, pos)
+                    xpos = int(xpos)
+                    ypos = int(ypos)
+                    dist = linalg.norm(np.array(pos)-np.array(self.camera_center))
 
                 # if xpos, ypos inside rectangle set pref obj id
                 if self.trigger_rectangle is not None and self.pref_obj_id is None:
@@ -370,18 +405,17 @@ class ImageDisplay:
             
         # PTF position
         if self.ptf_3d is not None:
+        
             if self.dummy:
-                print self.ptf_3d
                 xpos, ypos = DummyFlydra.reproject(self.ptf_3d)
-                
-                ptf_3d_plus_focus = [self.ptf_3d[0], self.ptf_3d[1], self.dist_world_max]
-                xpf, ypf = DummyFlydra.reproject(ptf_3d_plus_focus)
-                
-                ptf_3d_minus_focus = [self.ptf_3d[0], self.ptf_3d[1], self.dist_world_min]
-                xmf, ymf = DummyFlydra.reproject(ptf_3d_minus_focus)
+            if not self.dummy:
+                xpos, ypos = self.camera_calibration.find2d(self.cam_id, self.ptf_3d)
+            dist = linalg.norm( np.array(self.ptf_3d) - np.array(self.camera_center))
+            pix = self.dist_to_pixel(dist)
+            cv.Circle(cv_image, (int(pix),int(self.dist_scale_y)), 2, self.color_red, thickness=2)     
             cv.Circle(cv_image, (int(xpos),int(ypos)), 2, self.color_red, thickness=2)     
-            cv.Line(cv_image, (int(xmf), int(ymf)), (int(xpf), int(ypf)), self.color_red, thickness=1)
-            print xmf, xpf
+
+            print self.ptf_3d, 'pix: ', pix
             
             UL = (xpos-self.ptf_fov_in_gui_w, ypos-self.ptf_fov_in_gui_h)
             LR = (xpos+self.ptf_fov_in_gui_w, ypos+self.ptf_fov_in_gui_h)
@@ -410,7 +444,14 @@ if __name__ == '__main__':
     parser = OptionParser()
     parser.add_option("--device-num", type="int", dest="device_num", default=0,
                         help="camera device number")
+    parser.add_option("--calibration-filename", type="string", dest="calibration_filename", default=None,
+                        help="camera calibration filename, currently needs to be a single camera calibration")
+    parser.add_option("--dummy", action='store_true', dest="dummy", default=False,
+                        help="run using a dummy calibration, for testing")
     (options, args) = parser.parse_args()
+    
+    if options.calibration_filename is not None:
+        options.dummy = False
 
-    im = ImageDisplay(device_num=options.device_num)
+    im = ImageDisplay(device_num=options.device_num, dummy=options.dummy, calibration_filename=options.calibration_filename)
     im.run()
