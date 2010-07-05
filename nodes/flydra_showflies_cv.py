@@ -40,10 +40,29 @@ import pan_tilt_focus
 ## TO DO ##
 # currently in fly position the distance is the distance to flydra - not the ptf camera
 
-
+# field of view calculator:
+def FOV(frame_size, focal_length):
+    fov =  2 * np.arctan2 (frame_size,(focal_length * 2))
+    return fov
+    
+def sensor_dims(diagonal, res_w, res_h):
+    theta = np.arctan2(float(res_h),float(res_w))
+    size_w = np.cos(theta)*diagonal
+    size_h = np.sin(theta)*diagonal
+    return size_w, size_h
+    
 class ImageDisplay:
 
-    def __init__(self, device_num=0, color=True, calibration_filename=None, dummy=True):
+    def __init__(self,  device_num=0, 
+                        color=True, 
+                        calibration_filename=None, 
+                        dummy=True,
+                        gui_focal_length=6,
+                        gui_sensor_w=5,
+                        gui_sensor_h=3,
+                        ptf_focal_length=400,
+                        ptf_sensor_w=20,
+                        ptf_sensor_h=15):
 
         ## values that should be function inputs ##
         
@@ -58,10 +77,12 @@ class ImageDisplay:
         self.ptf_home = [0,0,0]
         
         # camera parameters - field of view, width and height:
-        self.field_of_view_w = np.pi*1.5 # field of view of GUI camera in radians
-        self.ptf_field_of_view_w = np.pi*0.08 # field of view of the camera on the PTF system
-        self.field_of_view_h = np.pi*1.5 # field of view of GUI camera in radians
-        self.ptf_field_of_view_h = np.pi*0.08 # field of view of the camera on the PTF system
+        
+        # FOV (rectilinear) =  2 * arctan (frame size/(focal length * 2))
+        self.field_of_view_w = FOV(gui_sensor_w,gui_focal_length) # field of view of GUI camera in radians
+        self.ptf_field_of_view_w = FOV(ptf_sensor_w,ptf_focal_length) # field of view of the camera on the PTF system
+        self.field_of_view_h = FOV(gui_sensor_h,gui_focal_length) # field of view of GUI camera in radians
+        self.ptf_field_of_view_h = FOV(ptf_sensor_h,ptf_focal_length) # field of view of the camera on the PTF system
         self.camera_center = [0,0,0]
         
         # camera calibration:
@@ -118,18 +139,20 @@ class ImageDisplay:
         self.device_num = device_num
         sub_name = 'camera_' + str(self.device_num)
         
+        node_name = 'image_display' + str(self.device_num)
+        rospy.init_node(node_name, anonymous=True)
+        print 'node initialized' 
+        
         rospy.Subscriber(sub_name,Image,self.image_callback)
         rospy.Subscriber("flydra_mainbrain_super_packets", flydra_mainbrain_super_packet, self.flydra_callback)
         rospy.Subscriber("ptf_3d", Point, self.ptf_3d_callback)
         rospy.Subscriber("ptf_home", Point, self.ptf_home_callback)
         rospy.Subscriber("ps3_interpreter", ps3values, self.ps3_callback)
+        print 'subscribing to ps3_interpreter'
         rospy.Subscriber("camera_center", Point, self.camera_center_callback)
         
         self.pub_pref_obj_id = rospy.Publisher('flydra_pref_obj_id', UInt32)
         
-        node_name = 'image_display' + str(self.device_num)
-        rospy.init_node(node_name, anonymous=True)
-
         # user callbacks
         cv.SetMouseCallback("Display", self.mouse, param = None)
 
@@ -165,6 +188,8 @@ class ImageDisplay:
             self.dist_world_max = self.pixel_to_dist(x)
             
     def ps3_callback(self, ps3values):
+    
+        # if experiencing joystick errors - hit L2 and R2 before using controller - values initialize at 0 for some strange reason
     
         # left joystick: move cursor
         if ps3values.L2 > 0.99 and ps3values.R2 > 0.99:
@@ -323,11 +348,6 @@ class ImageDisplay:
         # black background for focus bar
         cv.Rectangle(cv_image, (0,self.height-40), (self.width, self.height), self.color_black, thickness=-1)
         
-        # ptf home position
-        xpos = int(self.ptf_home[0]*self.width)
-        ypos = int(self.ptf_home[1]*self.height)
-        cv.Circle(cv_image, (xpos,ypos), 2, self.color_blue, thickness=2)
-        
         # draw the flies    
         if len(self.objects) > 0:
             if self.choose_object:
@@ -366,10 +386,14 @@ class ImageDisplay:
                     cv.PutText(cv_image, str(dist)[0:4], (xpos, ypos+10), self.small_font, self.color_light_green)
                 
                 if fly.obj_id == self.pref_obj_id:
+                    cv.PutText(cv_image, str(fly.obj_id), (xpos, ypos), self.font, self.color_red) 
+                    # circle for covariance
+                    cov = np.sum(np.abs(fly.posvel_covariance_diagonal[0:3]))
                     cx = xpos+len(str(fly.obj_id))*5
                     cy = ypos-5
-                    radius = len(str(fly.obj_id))*5+5
-                    cv.Circle(cv_image, (cx,cy), radius, self.color_red, thickness=1)       
+                    #radius = len(str(fly.obj_id))*5+5
+                    cv.Circle(cv_image, (cx,cy), cov*10, self.color_red, thickness=1)    
+                    cv.PutText(cv_image, str(cov), (xpos, ypos+20), self.small_font, self.color_red)   
 
                 # choose nearest object to last mouse click 
                 if self.choose_object:
@@ -410,10 +434,15 @@ class ImageDisplay:
                 xpos, ypos = DummyFlydra.reproject(self.ptf_3d)
             if not self.dummy:
                 xpos, ypos = self.camera_calibration.find2d(self.cam_id, self.ptf_3d)
+                xhome, yhome = self.camera_calibration.find2d(self.cam_id, self.ptf_home)
             dist = linalg.norm( np.array(self.ptf_3d) - np.array(self.camera_center))
+            home_dist = linalg.norm( np.array(self.ptf_home) - np.array(self.camera_center))
             pix = self.dist_to_pixel(dist)
-            cv.Circle(cv_image, (int(pix),int(self.dist_scale_y)), 2, self.color_red, thickness=2)     
-            cv.Circle(cv_image, (int(xpos),int(ypos)), 2, self.color_red, thickness=2)     
+            home_pix = self.dist_to_pixel(home_dist)
+            cv.Circle(cv_image, (int(pix),int(self.dist_scale_y)), 2, self.color_red, thickness=2)   
+            cv.Circle(cv_image, (int(home_pix),int(self.dist_scale_y)), 2, self.color_blue, thickness=2)   
+            cv.Circle(cv_image, (int(xpos),int(ypos)), 2, self.color_red, thickness=2)    
+            cv.Circle(cv_image, (int(xhome),int(yhome)), 2, self.color_blue, thickness=2)      
 
             print self.ptf_3d, 'pix: ', pix
             
@@ -448,10 +477,44 @@ if __name__ == '__main__':
                         help="camera calibration filename, currently needs to be a single camera calibration")
     parser.add_option("--dummy", action='store_true', dest="dummy", default=False,
                         help="run using a dummy calibration, for testing")
+    parser.add_option("--gui-focal-length", type="float", dest="gui_focal_length", default=6,
+                        help="focal length of the lens used on the camera for the gui system (mm)")
+    parser.add_option("--gui-sensor-type", type="string", dest="gui_sensor_type", default='1/3',
+                        help="sensor type for the gui camera, ie. '1/3', '1/2' etc.")
+    parser.add_option("--ptf-focal-length", type="float", dest="ptf_focal_length", default=400,
+                        help="focal length of the lens used on the ptf camera (mm)")
+    parser.add_option("--ptf-sensor-type", type="string", dest="ptf_sensor_type", default='APSC-1.6x',
+                        help="sensor type for the ptf camera, ie. 'APSC-1.6x', 'fullframe' etc.")
     (options, args) = parser.parse_args()
     
     if options.calibration_filename is not None:
         options.dummy = False
+        
+    if options.gui_sensor_type == '1/3':
+        gui_sensor_w, gui_sensor_h = sensor_dims(8.4666, 752, 480)
 
-    im = ImageDisplay(device_num=options.device_num, dummy=options.dummy, calibration_filename=options.calibration_filename)
+    if options.ptf_sensor_type == 'APSC-1.6x':
+        ptf_sensor_w, ptf_sensor_h = sensor_dims(35./1.6, 3, 2)
+    if options.ptf_sensor_type == 'fullframe':
+        ptf_sensor_w, ptf_sensor_h = sensor_dims(35., 3, 2)
+
+    im = ImageDisplay(  device_num=options.device_num, 
+                        dummy=options.dummy, 
+                        calibration_filename=options.calibration_filename, 
+                        gui_focal_length=options.gui_focal_length,
+                        gui_sensor_w=gui_sensor_w,
+                        gui_sensor_h=gui_sensor_h,
+                        ptf_focal_length=options.ptf_focal_length,
+                        ptf_sensor_w=ptf_sensor_w,
+                        ptf_sensor_h=ptf_sensor_h)
     im.run()
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
