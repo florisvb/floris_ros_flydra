@@ -260,8 +260,8 @@ class ImageDisplay:
         self.parameters_loaded = True        
         
     def dist_to_pixel(self,dist):
-        print 'dist to pixel: '
-        print dist, self.dist_scale_min, self.dist_scale_factor, self.dist_scale_x1
+        #print 'dist to pixel: '
+        #print dist, self.dist_scale_min, self.dist_scale_factor, self.dist_scale_x1
         return ( (dist-self.dist_scale_min)/self.dist_scale_factor + self.dist_scale_x1)
 
     def pixel_to_dist(self, pix):
@@ -435,16 +435,19 @@ class ImageDisplay:
             if not self.dummy:
                 xpos, ypos = self.camera_calibration.find2d(self.cam_id, self.ptf_3d)
                 xhome, yhome = self.camera_calibration.find2d(self.cam_id, self.ptf_home)
+            print '*'*80
+            print self.ptf_3d, self.camera_center
             dist = linalg.norm( np.array(self.ptf_3d) - np.array(self.camera_center))
             home_dist = linalg.norm( np.array(self.ptf_home) - np.array(self.camera_center))
             pix = self.dist_to_pixel(dist)
             home_pix = self.dist_to_pixel(home_dist)
+            #print '**', pix, self.dist_scale_y
             cv.Circle(cv_image, (int(pix),int(self.dist_scale_y)), 2, self.color_red, thickness=2)   
             cv.Circle(cv_image, (int(home_pix),int(self.dist_scale_y)), 2, self.color_blue, thickness=2)   
             cv.Circle(cv_image, (int(xpos),int(ypos)), 2, self.color_red, thickness=2)    
             cv.Circle(cv_image, (int(xhome),int(yhome)), 2, self.color_blue, thickness=2)      
 
-            print self.ptf_3d, 'pix: ', pix
+            print 'ptf_3d: ', self.ptf_3d, 'xpos, ypos: ', xpos, ypos
             
             UL = (xpos-self.ptf_fov_in_gui_w, ypos-self.ptf_fov_in_gui_h)
             LR = (xpos+self.ptf_fov_in_gui_w, ypos+self.ptf_fov_in_gui_h)
