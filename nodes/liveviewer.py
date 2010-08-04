@@ -2,8 +2,10 @@
 # By Floris van Breugel
 # ROS function to show a live view of the 3D objects being tracked
 # Supports flydra stimulus xml files 
+# Plotting is done at very low resolution to reduce resource consumption. See 'resolution' in class Object, and 'scene.anti_aliasing_frames' in Viewer
 
-# TODO: add show-cameras option, will require some sort of h5 or calibration file..
+# TODO: 
+# 1. add show-cameras option, will require some sort of h5 or calibration file..
 
 import roslib; roslib.load_manifest('floris_ros_flydra')
 import rospy
@@ -23,15 +25,16 @@ sys.path.append("/usr/share/pyshared/flydra/a2")
 import flydra.a2.xml_stimulus as xml_stimulus
 
 class Object:
-    def __init__(self, ghost_length=20):
+    def __init__(self, ghost_length=20, scale_factor=0.01):
         self.ghost_length = ghost_length
         # initialize some fly objects
         self.x = np.ones(ghost_length)
         self.y = np.zeros(ghost_length)
         self.z = np.zeros(ghost_length)
         self.speed = np.zeros(ghost_length)
+        self.zeros = np.zeros(ghost_length)
         # View them
-        self.l = mlab.points3d(self.x, self.y, self.z, self.speed, scale_factor=0.01)
+        self.l = mlab.points3d(self.x, self.y, self.z, self.speed, scale_factor=scale_factor, resolution=4, scale_mode='none')
         # Now animate the data.
         self.ms = self.l.mlab_source
         
@@ -42,14 +45,16 @@ class Object:
         self.speed = np.hstack( ([speed],self.speed[0:self.ghost_length-1]) )
         self.ms.set(x=self.x, y=self.y, z=self.z, scalars=self.speed)
         
+        if self.l.visible is False:
+            self.l._hideshow()
+        
     def hide(self):
-        self.speed = np.zeros(self.ghost_length)
-        self.ms.set(scalars=self.speed)
+        if self.l.visible is True:
+            self.ms.set(x=self.zeros, y=self.zeros, z=self.zeros, scalars=self.zeros)
+            self.l._hideshow()
         
 class Viewer:
-    def __init__(self, stim_xml_filename=None, num_points=5):
-    
-        #stim_xml_filename = '/home/floris/data/calibrations/landingbox_post_fulllength.xml'
+    def __init__(self, stim_xml_filename=None, num_points=5, scale_factor=0.01):
     
         # initialize the viewer window
         self.f = mlab.figure(size=(800,600))
@@ -91,16 +96,14 @@ class Viewer:
                 self.f.scene.disable_render = True # disable rendering while we calculate the new scene
                 for i in range(len(self.plot_objects)):
                 
-                    if i < len(self.objects):
-                        try:
-                            if self.objects is not None:
+                    if self.objects is not None:
+                        if i < len(self.objects):
+                            try:
                                 self.plot_objects[i].update(self.objects[i].position.x, self.objects[i].position.y, self.objects[i].position.z, self.speed[i])
-                        except:
-                            continue
-                            
-                    else:
-                        self.plot_objects[i].hide()
-                        pass
+                            except:
+                                continue
+                        else:
+                            self.plot_objects[i].hide()
                 self.f.scene.disable_render = False
                         
                 yield
@@ -123,11 +126,14 @@ if __name__ == '__main__':
     parser.add_option("--stim-xml", type="str", dest="stim_xml_filename", default=None,
                         help="filename for the stimulus xml")
     parser.add_option("--num-points", type="int", dest="num_points", default=5,
-                        help="number of flydra objects to display in the live viewer")
+                        help="maximum number of flydra objects to display in the live viewer")
     parser.add_option("--ghost-length", type="int", dest="ghost_length", default=10,
                         help="number of ghost frames to display for each object")
+    parser.add_option("--scale-factor", type="float", dest="scale_factor", default=0.01,
+                        help="scale factor for the glyphs used in the 3D plot objects")
     
     (options, args) = parser.parse_args()
         
     viewer = Viewer(stim_xml_filename=options.stim_xml_filename,
-                    num_points=options.num_points)
+                    num_points=options.num_points,
+                    scale_factor=options.scale_factor)
