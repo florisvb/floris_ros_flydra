@@ -106,11 +106,14 @@ class ImageDisplay:
         self.color_purple = cv.Scalar(255,0,255,0)
         self.color_white = cv.Scalar(255,255,255,0)
         self.color_black = cv.Scalar(0,0,0,0)
+        self.active = 1
         # puttext puts lower left letter at (x,y) 
         
         ############################################
-    
-        cv.NamedWindow("Display",1)
+        self.device_num = device_num
+        sub_name = 'camera_' + str(self.device_num)
+        self.display_name = "Display Cam: " + str(self.device_num)
+        cv.NamedWindow(self.display_name,1)
         
         self.bridge = CvBridge()
         self.color = color
@@ -136,9 +139,6 @@ class ImageDisplay:
 
         self.trigger_distance = None
 
-        self.device_num = device_num
-        sub_name = 'camera_' + str(self.device_num)
-        
         node_name = 'image_display' + str(self.device_num)
         rospy.init_node(node_name, anonymous=True)
         print 'node initialized' 
@@ -154,10 +154,10 @@ class ImageDisplay:
         self.pub_pref_obj_id = rospy.Publisher('flydra_pref_obj_id', UInt32)
         
         # user callbacks
-        cv.SetMouseCallback("Display", self.mouse, param = None)
+        cv.SetMouseCallback(self.display_name, self.mouse, param = None)
 
     def mouse(self, event, x, y, flags, param):
-
+    
         # make draggable trigger rectangle
         if event == cv.CV_EVENT_RBUTTONDOWN:
             self.trigger_rectangle = [(x,y), (x,y)]
@@ -175,10 +175,8 @@ class ImageDisplay:
 
         # choose obj id
         if event == cv.CV_EVENT_LBUTTONUP:
-            self.mousex = x
-            self.mousey = y
-            self.choose_pref_obj_id()
-
+            self.active *= -1
+                            
         # distance trigger rectangle
         if flags == cv.CV_EVENT_FLAG_CTRLKEY:
             self.trigger_distance = [(x,self.dist_scale_y-5), (x,self.dist_scale_y+5)]
@@ -191,45 +189,48 @@ class ImageDisplay:
     
         # if experiencing joystick errors - hit L2 and R2 before using controller - values initialize at 0 for some strange reason
     
-        # left joystick: move cursor
-        if ps3values.L2 > 0.99 and ps3values.R2 > 0.99:
-            self.cursor = self.cursor + np.array([ps3values.joyleft_x, ps3values.joyleft_y])*self.cursorgain
-            for i in range(2):
-                if self.cursor[i] > 1: self.cursor[i] = 1
-                if self.cursor[i] < 0: self.cursor[i] = 0
-                
-            # x button: mouse left click
-            if ps3values.x:
-                self.mouse(cv.CV_EVENT_LBUTTONUP, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
-        
-            # square button: draw selection box: mouse right click and drag
-            if ps3values.square is True:
-                if self.square is False:
-                    self.mouse(cv.CV_EVENT_RBUTTONDOWN, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
-                    self.square = True
-                if self.square is True:
-                    self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_RBUTTON, None)
-            if ps3values.square is False:
-                if self.square is True:
-                    self.mouse(cv.CV_EVENT_RBUTTONUP, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
-                    self.square = False
+        # only on active window!
+        if self.active == 1:
+    
+            # left joystick: move cursor
+            if ps3values.L2 > 0.99 and ps3values.R2 > 0.99:
+                self.cursor = self.cursor + np.array([ps3values.joyleft_x, ps3values.joyleft_y])*self.cursorgain
+                for i in range(2):
+                    if self.cursor[i] > 1: self.cursor[i] = 1
+                    if self.cursor[i] < 0: self.cursor[i] = 0
                     
-            # start button: clear selections: mouse middle button up
-            if ps3values.start is True:
-                self.mouse(cv.CV_EVENT_MBUTTONUP, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
-                
-                
-            # circle button: distance trigger rectangle
-            if ps3values.circle is True:
-                if self.circle is False:
-                    self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_CTRLKEY, None)
-                    self.circle = True
-                if self.circle is True:
-                    self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_SHIFTKEY, None)
-            if ps3values.circle is False:
-                if self.circle is True:
-                    self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_SHIFTKEY, None)
-                    self.circle = False
+                # x button: mouse left click
+                if ps3values.x:
+                    self.mouse(cv.CV_EVENT_LBUTTONUP, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
+            
+                # square button: draw selection box: mouse right click and drag
+                if ps3values.square is True:
+                    if self.square is False:
+                        self.mouse(cv.CV_EVENT_RBUTTONDOWN, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
+                        self.square = True
+                    if self.square is True:
+                        self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_RBUTTON, None)
+                if ps3values.square is False:
+                    if self.square is True:
+                        self.mouse(cv.CV_EVENT_RBUTTONUP, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
+                        self.square = False
+                        
+                # start button: clear selections: mouse middle button up
+                if ps3values.start is True:
+                    self.mouse(cv.CV_EVENT_MBUTTONUP, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
+                    
+                    
+                # circle button: distance trigger rectangle
+                if ps3values.circle is True:
+                    if self.circle is False:
+                        self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_CTRLKEY, None)
+                        self.circle = True
+                    if self.circle is True:
+                        self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_SHIFTKEY, None)
+                if ps3values.circle is False:
+                    if self.circle is True:
+                        self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_SHIFTKEY, None)
+                        self.circle = False
             
             
     def ptf_3d_callback(self, data):
@@ -266,7 +267,7 @@ class ImageDisplay:
 
     def pixel_to_dist(self, pix):
         dist = (pix - self.dist_scale_x1)*self.dist_scale_factor+self.dist_scale_min
-        print dist
+        #print dist
         return dist
 
     def clear(self):
@@ -276,6 +277,7 @@ class ImageDisplay:
         self.load_parameters()
 
     def flydra_callback(self, super_packet):
+        print 'flydra callback!'
         for packet in super_packet.packets:
             self.objects = packet.objects        
         self.obj_ids = [obj.obj_id for obj in self.objects]
@@ -345,6 +347,11 @@ class ImageDisplay:
         pref_obj_id = 'pref obj id: ' + str(self.pref_obj_id)
         cv.PutText(cv_image, pref_obj_id, (0, 35), self.font, self.color_green)
         
+        if self.active == 1:
+            cv.PutText(cv_image, 'active', (self.width-100, 15), self.font, self.color_red)
+        elif self.active == -1:
+            cv.PutText(cv_image, 'dormant', (self.width-100, 15), self.font, self.color_green)
+            
         # black background for focus bar
         cv.Rectangle(cv_image, (0,self.height-40), (self.width, self.height), self.color_black, thickness=-1)
         
@@ -428,15 +435,15 @@ class ImageDisplay:
             cv.Rectangle(cv_image, self.trigger_distance[0], self.trigger_distance[1], self.color_blue, thickness=1)
             
         # PTF position
-        if self.ptf_3d is not None:
+        if 0: #self.ptf_3d is not None:
         
             if self.dummy:
                 xpos, ypos = DummyFlydra.reproject(self.ptf_3d)
             if not self.dummy:
                 xpos, ypos = self.camera_calibration.find2d(self.cam_id, self.ptf_3d)
                 xhome, yhome = self.camera_calibration.find2d(self.cam_id, self.ptf_home)
-            print '*'*80
-            print self.ptf_3d, self.camera_center
+            #print '*'*80
+            #print self.ptf_3d, self.camera_center
             dist = linalg.norm( np.array(self.ptf_3d) - np.array(self.camera_center))
             home_dist = linalg.norm( np.array(self.ptf_home) - np.array(self.camera_center))
             pix = self.dist_to_pixel(dist)
@@ -447,7 +454,7 @@ class ImageDisplay:
             cv.Circle(cv_image, (int(xpos),int(ypos)), 2, self.color_red, thickness=2)    
             cv.Circle(cv_image, (int(xhome),int(yhome)), 2, self.color_blue, thickness=2)      
 
-            print 'ptf_3d: ', self.ptf_3d, 'xpos, ypos: ', xpos, ypos
+            #print 'ptf_3d: ', self.ptf_3d, 'xpos, ypos: ', xpos, ypos
             
             UL = (xpos-self.ptf_fov_in_gui_w, ypos-self.ptf_fov_in_gui_h)
             LR = (xpos+self.ptf_fov_in_gui_w, ypos+self.ptf_fov_in_gui_h)
@@ -461,7 +468,7 @@ class ImageDisplay:
         cv.Line(cv_image, (xpos, ypos-10), (xpos,ypos+10), self.color_purple, thickness=1)
 
         ##########################################################
-        cv.ShowImage("Display", cv_image)
+        cv.ShowImage(self.display_name, cv_image)
         cv.WaitKey(3)
 
     def run(self):
