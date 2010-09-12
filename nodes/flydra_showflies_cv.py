@@ -168,14 +168,8 @@ class ImageDisplay:
     def mouse(self, event, x, y, flags, param):
     
         # make draggable trigger rectangle
-        if event == cv.CV_EVENT_RBUTTONDOWN:
-            self.trigger_rectangle = [(x,y), (x,y)]
-        if event == cv.CV_EVENT_MOUSEMOVE and flags == cv.CV_EVENT_FLAG_RBUTTON:
-            self.trigger_rectangle[1] = (x,y)
         if event == cv.CV_EVENT_RBUTTONUP:
-            self.trigger_rectangle[1] = (x,y)
-            self.choose_object = False
-            self.set_pref_obj_id(None)
+            self.active *= -1
 
         # clear selections
         if event == cv.CV_EVENT_MBUTTONUP:
@@ -184,7 +178,7 @@ class ImageDisplay:
 
         # choose obj id
         if event == cv.CV_EVENT_LBUTTONUP:
-            self.active *= -1
+            self.choose_pref_obj_id()
                             
         # distance trigger rectangle
         if flags == cv.CV_EVENT_FLAG_CTRLKEY:
