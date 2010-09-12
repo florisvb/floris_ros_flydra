@@ -53,7 +53,9 @@ def sensor_dims(diagonal, res_w, res_h):
     
 class ImageDisplay:
 
-    def __init__(self,  device_num=0, 
+    def __init__(self,  calibration=None,
+                        camid=None,
+                        device_num=0, 
                         color=True, 
                         calibration_filename=None, 
                         dummy=True,
@@ -87,11 +89,14 @@ class ImageDisplay:
         
         # camera calibration:
         self.dummy = dummy
+        self.cam_id = camid
         if self.dummy is not None:
             if calibration_filename is not None:
                 self.camera_calibration = reconstruct.Reconstructor(calibration_filename)
                 self.cam_id = self.camera_calibration.get_cam_ids()[0]
-            if calibration_filename is None:
+            if calibration is not None:
+                self.camera_calibration = reconstruct.Reconstructor(calibration)
+            else:
                 print 'WARNING: running with a dummy calibration, please enter a calibration_filename'
                 self.dummy = True
         
@@ -110,9 +115,7 @@ class ImageDisplay:
         # puttext puts lower left letter at (x,y) 
         
         ############################################
-        self.device_num = device_num
-        sub_name = 'camera_' + str(self.device_num)
-        self.display_name = "Display Cam: " + str(self.device_num)
+        self.display_name = "Display Cam: " + str(self.cam_id)
         cv.NamedWindow(self.display_name,1)
         
         self.bridge = CvBridge()
@@ -139,11 +142,17 @@ class ImageDisplay:
 
         self.trigger_distance = None
 
-        node_name = 'image_display' + str(self.device_num)
+        node_name = 'image_display' + str(self.cam_id)
         rospy.init_node(node_name, anonymous=True)
         print 'node initialized' 
         
-        rospy.Subscriber(sub_name,Image,self.image_callback)
+        
+        try: 
+            topic = self.cam_id + '/image_raw'
+        except:
+            raise ValueError('please enter a valid cam_id')
+        rospy.Subscriber(topic,Image,self.image_callback)
+
         rospy.Subscriber("flydra_mainbrain_super_packets", flydra_mainbrain_super_packet, self.flydra_callback)
         rospy.Subscriber("ptf_3d", Point, self.ptf_3d_callback)
         rospy.Subscriber("ptf_home", Point, self.ptf_home_callback)
@@ -323,16 +332,17 @@ class ImageDisplay:
             # choose next time we're in the draw frame (so we don't recalculate fly pos constantly)
             return
             
-
     def image_callback(self,data):
-        try:
-            if self.color:
-                cv_image = self.bridge.imgmsg_to_cv(data, "rgb8")
-            else:
-                cv_image = self.bridge.imgmsg_to_cv(data, "mono8")
-        except CvBridgeError, e:
-            print e
-
+        encoding = data.encoding
+        img = self.bridge.imgmsg_to_cv(data, desired_encoding="passthrough")
+        cv_image = cv.CreateImage(cv.GetSize(img),cv.IPL_DEPTH_8U,3)
+        
+        if data.encoding == 'bayer_bggr8':
+            cv.CvtColor(img, cv_image,cv.CV_BayerRG2RGB)
+        else:
+            print 'warning: bayer type not recognized, using monochrome image instead'
+            cv_image = img        
+                
         if self.parameters_loaded is False:
             self.width = cv.GetSize(cv_image)[0]
             self.height = cv.GetSize(cv_image)[1]
@@ -495,6 +505,12 @@ if __name__ == '__main__':
                         help="focal length of the lens used on the ptf camera (mm)")
     parser.add_option("--ptf-sensor-type", type="string", dest="ptf_sensor_type", default='APSC-1.6x',
                         help="sensor type for the ptf camera, ie. 'APSC-1.6x', 'fullframe' etc.")
+                        
+    parser.add_option("--camid", type="string", dest="camid", default='None',
+                        help='camid of the desired camnode camera to use')
+    parser.add_option("--calibration", type="string", dest="calibration", default=None,
+                        help="flydra camera calibration filename")
+    
     (options, args) = parser.parse_args()
     
     if options.calibration_filename is not None:
@@ -508,7 +524,9 @@ if __name__ == '__main__':
     if options.ptf_sensor_type == 'fullframe':
         ptf_sensor_w, ptf_sensor_h = sensor_dims(35., 3, 2)
 
-    im = ImageDisplay(  device_num=options.device_num, 
+    im = ImageDisplay(  calibration=options.calibration,
+                        camid=options.camid,
+                        device_num=options.device_num, 
                         dummy=options.dummy, 
                         calibration_filename=options.calibration_filename, 
                         gui_focal_length=options.gui_focal_length,
