@@ -178,6 +178,8 @@ class ImageDisplay:
 
         # choose obj id
         if event == cv.CV_EVENT_LBUTTONUP:
+            self.mousex = x
+            self.mousey = y
             self.choose_pref_obj_id()
                             
         # distance trigger rectangle
@@ -194,6 +196,9 @@ class ImageDisplay:
     
         # only on active window!
         if self.active == 1:
+        
+            x = int(self.cursor[0]*self.width)
+            y = int(self.cursor[1]*self.height)
     
             # left joystick: move cursor
             if ps3values.L2 > 0.99 and ps3values.R2 > 0.99:
@@ -204,18 +209,18 @@ class ImageDisplay:
                     
                 # x button: mouse left click
                 if ps3values.x:
-                    self.mouse(cv.CV_EVENT_LBUTTONUP, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
+                    self.mouse(cv.CV_EVENT_LBUTTONUP, x, y, None, None)
             
                 # square button: draw selection box: mouse right click and drag
                 if ps3values.square is True:
                     if self.square is False:
-                        self.mouse(cv.CV_EVENT_RBUTTONDOWN, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
+                        self.trigger_rectangle = [(x,y), (x,y)]
                         self.square = True
                     if self.square is True:
-                        self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_RBUTTON, None)
+                        self.trigger_rectangle[1] = (x,y)
                 if ps3values.square is False:
                     if self.square is True:
-                        self.mouse(cv.CV_EVENT_RBUTTONUP, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
+                        self.choose_object = False
                         self.square = False
                         
                 # start button: clear selections: mouse middle button up
@@ -280,7 +285,6 @@ class ImageDisplay:
         self.load_parameters()
 
     def flydra_callback(self, super_packet):
-        print 'flydra callback!'
         for packet in super_packet.packets:
             self.objects = packet.objects        
         self.obj_ids = [obj.obj_id for obj in self.objects]
