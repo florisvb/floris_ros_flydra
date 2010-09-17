@@ -443,11 +443,11 @@ class ImageDisplay:
             cv.Rectangle(cv_image, self.trigger_distance[0], self.trigger_distance[1], self.color_blue, thickness=1)
             
         # PTF position
-        if 0: #self.ptf_3d is not None:
+        if self.ptf_3d is not None:
         
             if self.dummy:
                 xpos, ypos = DummyFlydra.reproject(self.ptf_3d)
-            if not self.dummy:
+            if not self.dummy and self.ptf_3d is not None:
                 xpos, ypos = self.camera_calibration.find2d(self.cam_id, self.ptf_3d)
                 xhome, yhome = self.camera_calibration.find2d(self.cam_id, self.ptf_home)
             #print '*'*80
