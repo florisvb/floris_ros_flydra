@@ -376,9 +376,10 @@ class ImageDisplay:
                     dist = linalg.norm(pos)
                 if not self.dummy:
                     pos = [fly.position.x, fly.position.y, fly.position.z]
-                    xpos, ypos = self.camera_calibration.find2d(self.cam_id, pos)
+                    xpos, ypos = self.camera_calibration.find2d(self.cam_id, pos, distorted=True)
                     xpos = int(xpos)
                     ypos = int(ypos)
+                    cv.Circle(cv_image, (xpos,ypos), 1, self.color_red, thickness=1)    
                     dist = linalg.norm(np.array(pos)-np.array(self.camera_center))
 
                 # if xpos, ypos inside rectangle set pref obj id
@@ -450,8 +451,8 @@ class ImageDisplay:
                 xhome = 0
                 yhome = 0
             if not self.dummy and self.ptf_3d is not None:
-                xpos, ypos = self.camera_calibration.find2d(self.cam_id, self.ptf_3d)
-                xhome, yhome = self.camera_calibration.find2d(self.cam_id, self.ptf_home)
+                xpos, ypos = self.camera_calibration.find2d(self.cam_id, self.ptf_3d, distorted=True)
+                xhome, yhome = self.camera_calibration.find2d(self.cam_id, self.ptf_home, distorted=True)
             #print '*'*80
             #print self.ptf_3d, self.camera_center
             dist = linalg.norm( np.array(self.ptf_3d) - np.array(self.camera_center))
