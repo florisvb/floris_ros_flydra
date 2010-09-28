@@ -447,6 +447,8 @@ class ImageDisplay:
         
             if self.dummy:
                 xpos, ypos = DummyFlydra.reproject(self.ptf_3d)
+                xhome = 0
+                yhome = 0
             if not self.dummy and self.ptf_3d is not None:
                 xpos, ypos = self.camera_calibration.find2d(self.cam_id, self.ptf_3d)
                 xhome, yhome = self.camera_calibration.find2d(self.cam_id, self.ptf_home)
