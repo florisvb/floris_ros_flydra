@@ -53,7 +53,9 @@ def sensor_dims(diagonal, res_w, res_h):
     
 class ImageDisplay:
 
-    def __init__(self,  device_num=0, 
+    def __init__(self,  calibration=None,
+                        camid=None,
+                        device_num=0, 
                         color=True, 
                         calibration_filename=None, 
                         dummy=True,
@@ -87,11 +89,14 @@ class ImageDisplay:
         
         # camera calibration:
         self.dummy = dummy
+        self.cam_id = camid
         if self.dummy is not None:
             if calibration_filename is not None:
                 self.camera_calibration = reconstruct.Reconstructor(calibration_filename)
                 self.cam_id = self.camera_calibration.get_cam_ids()[0]
-            if calibration_filename is None:
+            if calibration is not None:
+                self.camera_calibration = reconstruct.Reconstructor(calibration)
+            else:
                 print 'WARNING: running with a dummy calibration, please enter a calibration_filename'
                 self.dummy = True
         
@@ -106,11 +111,12 @@ class ImageDisplay:
         self.color_purple = cv.Scalar(255,0,255,0)
         self.color_white = cv.Scalar(255,255,255,0)
         self.color_black = cv.Scalar(0,0,0,0)
+        self.active = 1
         # puttext puts lower left letter at (x,y) 
         
         ############################################
-    
-        cv.NamedWindow("Display",1)
+        self.display_name = "Display Cam: " + str(self.cam_id)
+        cv.NamedWindow(self.display_name,1)
         
         self.bridge = CvBridge()
         self.color = color
@@ -136,14 +142,17 @@ class ImageDisplay:
 
         self.trigger_distance = None
 
-        self.device_num = device_num
-        sub_name = 'camera_' + str(self.device_num)
-        
-        node_name = 'image_display' + str(self.device_num)
+        node_name = 'image_display' + str(self.cam_id)
         rospy.init_node(node_name, anonymous=True)
         print 'node initialized' 
         
-        rospy.Subscriber(sub_name,Image,self.image_callback)
+        
+        try: 
+            topic = self.cam_id + '/image_raw'
+        except:
+            raise ValueError('please enter a valid cam_id')
+        rospy.Subscriber(topic,Image,self.image_callback)
+
         rospy.Subscriber("flydra_mainbrain_super_packets", flydra_mainbrain_super_packet, self.flydra_callback)
         rospy.Subscriber("ptf_3d", Point, self.ptf_3d_callback)
         rospy.Subscriber("ptf_home", Point, self.ptf_home_callback)
@@ -154,19 +163,13 @@ class ImageDisplay:
         self.pub_pref_obj_id = rospy.Publisher('flydra_pref_obj_id', UInt32)
         
         # user callbacks
-        cv.SetMouseCallback("Display", self.mouse, param = None)
+        cv.SetMouseCallback(self.display_name, self.mouse, param = None)
 
     def mouse(self, event, x, y, flags, param):
-
+    
         # make draggable trigger rectangle
-        if event == cv.CV_EVENT_RBUTTONDOWN:
-            self.trigger_rectangle = [(x,y), (x,y)]
-        if event == cv.CV_EVENT_MOUSEMOVE and flags == cv.CV_EVENT_FLAG_RBUTTON:
-            self.trigger_rectangle[1] = (x,y)
         if event == cv.CV_EVENT_RBUTTONUP:
-            self.trigger_rectangle[1] = (x,y)
-            self.choose_object = False
-            self.set_pref_obj_id(None)
+            self.active *= -1
 
         # clear selections
         if event == cv.CV_EVENT_MBUTTONUP:
@@ -178,7 +181,7 @@ class ImageDisplay:
             self.mousex = x
             self.mousey = y
             self.choose_pref_obj_id()
-
+                            
         # distance trigger rectangle
         if flags == cv.CV_EVENT_FLAG_CTRLKEY:
             self.trigger_distance = [(x,self.dist_scale_y-5), (x,self.dist_scale_y+5)]
@@ -191,45 +194,51 @@ class ImageDisplay:
     
         # if experiencing joystick errors - hit L2 and R2 before using controller - values initialize at 0 for some strange reason
     
-        # left joystick: move cursor
-        if ps3values.L2 > 0.99 and ps3values.R2 > 0.99:
-            self.cursor = self.cursor + np.array([ps3values.joyleft_x, ps3values.joyleft_y])*self.cursorgain
-            for i in range(2):
-                if self.cursor[i] > 1: self.cursor[i] = 1
-                if self.cursor[i] < 0: self.cursor[i] = 0
-                
-            # x button: mouse left click
-            if ps3values.x:
-                self.mouse(cv.CV_EVENT_LBUTTONUP, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
+        # only on active window!
+        if self.active == 1:
         
-            # square button: draw selection box: mouse right click and drag
-            if ps3values.square is True:
-                if self.square is False:
-                    self.mouse(cv.CV_EVENT_RBUTTONDOWN, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
-                    self.square = True
-                if self.square is True:
-                    self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_RBUTTON, None)
-            if ps3values.square is False:
-                if self.square is True:
-                    self.mouse(cv.CV_EVENT_RBUTTONUP, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
-                    self.square = False
+            x = int(self.cursor[0]*self.width)
+            y = int(self.cursor[1]*self.height)
+    
+            # left joystick: move cursor
+            if ps3values.L2 > 0.99 and ps3values.R2 > 0.99:
+                self.cursor = self.cursor + np.array([ps3values.joyleft_x, ps3values.joyleft_y])*self.cursorgain
+                for i in range(2):
+                    if self.cursor[i] > 1: self.cursor[i] = 1
+                    if self.cursor[i] < 0: self.cursor[i] = 0
                     
-            # start button: clear selections: mouse middle button up
-            if ps3values.start is True:
-                self.mouse(cv.CV_EVENT_MBUTTONUP, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
-                
-                
-            # circle button: distance trigger rectangle
-            if ps3values.circle is True:
-                if self.circle is False:
-                    self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_CTRLKEY, None)
-                    self.circle = True
-                if self.circle is True:
-                    self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_SHIFTKEY, None)
-            if ps3values.circle is False:
-                if self.circle is True:
-                    self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_SHIFTKEY, None)
-                    self.circle = False
+                # x button: mouse left click
+                if ps3values.x:
+                    self.mouse(cv.CV_EVENT_LBUTTONUP, x, y, None, None)
+            
+                # square button: draw selection box: mouse right click and drag
+                if ps3values.square is True:
+                    if self.square is False:
+                        self.trigger_rectangle = [(x,y), (x,y)]
+                        self.square = True
+                    if self.square is True:
+                        self.trigger_rectangle[1] = (x,y)
+                if ps3values.square is False:
+                    if self.square is True:
+                        self.choose_object = False
+                        self.square = False
+                        
+                # start button: clear selections: mouse middle button up
+                if ps3values.start is True:
+                    self.mouse(cv.CV_EVENT_MBUTTONUP, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), None, None)
+                    
+                    
+                # circle button: distance trigger rectangle
+                if ps3values.circle is True:
+                    if self.circle is False:
+                        self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_CTRLKEY, None)
+                        self.circle = True
+                    if self.circle is True:
+                        self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_SHIFTKEY, None)
+                if ps3values.circle is False:
+                    if self.circle is True:
+                        self.mouse(cv.CV_EVENT_MOUSEMOVE, int(self.cursor[0]*self.width), int(self.cursor[1]*self.height), cv.CV_EVENT_FLAG_SHIFTKEY, None)
+                        self.circle = False
             
             
     def ptf_3d_callback(self, data):
@@ -266,7 +275,7 @@ class ImageDisplay:
 
     def pixel_to_dist(self, pix):
         dist = (pix - self.dist_scale_x1)*self.dist_scale_factor+self.dist_scale_min
-        print dist
+        #print dist
         return dist
 
     def clear(self):
@@ -321,16 +330,17 @@ class ImageDisplay:
             # choose next time we're in the draw frame (so we don't recalculate fly pos constantly)
             return
             
-
     def image_callback(self,data):
-        try:
-            if self.color:
-                cv_image = self.bridge.imgmsg_to_cv(data, "rgb8")
-            else:
-                cv_image = self.bridge.imgmsg_to_cv(data, "mono8")
-        except CvBridgeError, e:
-            print e
-
+        encoding = data.encoding
+        img = self.bridge.imgmsg_to_cv(data, desired_encoding="passthrough")
+        cv_image = cv.CreateImage(cv.GetSize(img),cv.IPL_DEPTH_8U,3)
+        
+        if data.encoding == 'bayer_bggr8':
+            cv.CvtColor(img, cv_image,cv.CV_BayerRG2RGB)
+        else:
+            print 'warning: bayer type not recognized, using monochrome image instead'
+            cv_image = img        
+                
         if self.parameters_loaded is False:
             self.width = cv.GetSize(cv_image)[0]
             self.height = cv.GetSize(cv_image)[1]
@@ -345,6 +355,11 @@ class ImageDisplay:
         pref_obj_id = 'pref obj id: ' + str(self.pref_obj_id)
         cv.PutText(cv_image, pref_obj_id, (0, 35), self.font, self.color_green)
         
+        if self.active == 1:
+            cv.PutText(cv_image, 'active', (self.width-100, 15), self.font, self.color_red)
+        elif self.active == -1:
+            cv.PutText(cv_image, 'dormant', (self.width-100, 15), self.font, self.color_green)
+            
         # black background for focus bar
         cv.Rectangle(cv_image, (0,self.height-40), (self.width, self.height), self.color_black, thickness=-1)
         
@@ -361,9 +376,10 @@ class ImageDisplay:
                     dist = linalg.norm(pos)
                 if not self.dummy:
                     pos = [fly.position.x, fly.position.y, fly.position.z]
-                    xpos, ypos = self.camera_calibration.find2d(self.cam_id, pos)
+                    xpos, ypos = self.camera_calibration.find2d(self.cam_id, pos, distorted=True)
                     xpos = int(xpos)
                     ypos = int(ypos)
+                    cv.Circle(cv_image, (xpos,ypos), 1, self.color_red, thickness=1)    
                     dist = linalg.norm(np.array(pos)-np.array(self.camera_center))
 
                 # if xpos, ypos inside rectangle set pref obj id
@@ -432,11 +448,13 @@ class ImageDisplay:
         
             if self.dummy:
                 xpos, ypos = DummyFlydra.reproject(self.ptf_3d)
-            if not self.dummy:
-                xpos, ypos = self.camera_calibration.find2d(self.cam_id, self.ptf_3d)
-                xhome, yhome = self.camera_calibration.find2d(self.cam_id, self.ptf_home)
-            print '*'*80
-            print self.ptf_3d, self.camera_center
+                xhome = 0
+                yhome = 0
+            if not self.dummy and self.ptf_3d is not None:
+                xpos, ypos = self.camera_calibration.find2d(self.cam_id, self.ptf_3d, distorted=True)
+                xhome, yhome = self.camera_calibration.find2d(self.cam_id, self.ptf_home, distorted=True)
+            #print '*'*80
+            #print self.ptf_3d, self.camera_center
             dist = linalg.norm( np.array(self.ptf_3d) - np.array(self.camera_center))
             home_dist = linalg.norm( np.array(self.ptf_home) - np.array(self.camera_center))
             pix = self.dist_to_pixel(dist)
@@ -447,7 +465,7 @@ class ImageDisplay:
             cv.Circle(cv_image, (int(xpos),int(ypos)), 2, self.color_red, thickness=2)    
             cv.Circle(cv_image, (int(xhome),int(yhome)), 2, self.color_blue, thickness=2)      
 
-            print 'ptf_3d: ', self.ptf_3d, 'xpos, ypos: ', xpos, ypos
+            #print 'ptf_3d: ', self.ptf_3d, 'xpos, ypos: ', xpos, ypos
             
             UL = (xpos-self.ptf_fov_in_gui_w, ypos-self.ptf_fov_in_gui_h)
             LR = (xpos+self.ptf_fov_in_gui_w, ypos+self.ptf_fov_in_gui_h)
@@ -461,7 +479,7 @@ class ImageDisplay:
         cv.Line(cv_image, (xpos, ypos-10), (xpos,ypos+10), self.color_purple, thickness=1)
 
         ##########################################################
-        cv.ShowImage("Display", cv_image)
+        cv.ShowImage(self.display_name, cv_image)
         cv.WaitKey(3)
 
     def run(self):
@@ -488,6 +506,12 @@ if __name__ == '__main__':
                         help="focal length of the lens used on the ptf camera (mm)")
     parser.add_option("--ptf-sensor-type", type="string", dest="ptf_sensor_type", default='APSC-1.6x',
                         help="sensor type for the ptf camera, ie. 'APSC-1.6x', 'fullframe' etc.")
+                        
+    parser.add_option("--camid", type="string", dest="camid", default='None',
+                        help='camid of the desired camnode camera to use')
+    parser.add_option("--calibration", type="string", dest="calibration", default=None,
+                        help="flydra camera calibration filename")
+    
     (options, args) = parser.parse_args()
     
     if options.calibration_filename is not None:
@@ -501,7 +525,9 @@ if __name__ == '__main__':
     if options.ptf_sensor_type == 'fullframe':
         ptf_sensor_w, ptf_sensor_h = sensor_dims(35., 3, 2)
 
-    im = ImageDisplay(  device_num=options.device_num, 
+    im = ImageDisplay(  calibration=options.calibration,
+                        camid=options.camid,
+                        device_num=options.device_num, 
                         dummy=options.dummy, 
                         calibration_filename=options.calibration_filename, 
                         gui_focal_length=options.gui_focal_length,
