@@ -21,11 +21,27 @@ class SA1:
         if print_time:
             print 'triggered!, time: ', time.time()
             
+class ObjIDPicker:
+    def __init__(self):
+        self.pref_obj_id = None
+        self.pub = rospy.Publisher('flydra_pref_obj_id', UInt32)
+    def trigger_obj_id_picker(self, obj):
+        if self.pref_obj_id != obj.obj_id:
+            self.pref_obj_id = obj.obj_id
+            self.pub.publish(UInt32(self.pref_obj_id))
+    def empty_function(self):
+        if self.pref_obj_id != None:
+            self.pref_obj_id = None
+            self.pub.publish(UInt32(self.pref_obj_id))
+            
 def example_trigger_function(obj):
     print
     print [obj.position.x, obj.position.y, obj.position.z]
     print 'triggered!' 
     print
+    
+def example_empty_function():
+    pass
         
 class VolumeTrigger:
     def __init__(self):
@@ -74,11 +90,12 @@ class VolumeTrigger:
 
 
 class Listener:
-    def __init__(self, trigger_function=example_trigger_function):
+    def __init__(self, trigger_function=example_trigger_function, empty_function=example_empty_function):
     
         self.volume_trigger = VolumeTrigger()
         self.trigger_name = 'volume_trigger'
         self.trigger_function = trigger_function
+        self.empty_function = empty_function
     
     def run(self):
         # ROS
@@ -99,6 +116,7 @@ class Listener:
                     self.last_time = time.time()
                 else:
                     self.pub.publish(0)
+                    self.empty_function()
             
     
 
