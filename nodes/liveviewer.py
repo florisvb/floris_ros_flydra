@@ -25,7 +25,7 @@ sys.path.append("/usr/share/pyshared/flydra/a2")
 import flydra.a2.xml_stimulus as xml_stimulus
 
 class Object:
-    def __init__(self, ghost_length=20, scale_factor=0.01):
+    def __init__(self, ghost_length=20, scale_factor=0.01, resolution=4):
         self.ghost_length = ghost_length
         # initialize some fly objects
         self.x = np.ones(ghost_length)
@@ -34,7 +34,7 @@ class Object:
         self.speed = np.zeros(ghost_length)
         self.zeros = np.zeros(ghost_length)
         # View them
-        self.l = mlab.points3d(self.x, self.y, self.z, self.speed, scale_factor=scale_factor, resolution=4, scale_mode='none')
+        self.l = mlab.points3d(self.x, self.y, self.z, self.speed, scale_factor=scale_factor, resolution=resolution, scale_mode='none')
         # Now animate the data.
         self.ms = self.l.mlab_source
         
@@ -54,7 +54,7 @@ class Object:
             self.l._hideshow()
         
 class Viewer:
-    def __init__(self, stim_xml_filename=None, num_points=5, scale_factor=0.01):
+    def __init__(self, stim_xml_filename=None, num_points=5, scale_factor=0.01, ghost_length=20, resolution=4):
     
         # initialize the viewer window
         self.f = mlab.figure(size=(800,600))
@@ -64,7 +64,10 @@ class Viewer:
         
         ################# moving fly objects ################
         self.num_points = num_points
-        self.plot_objects = [Object() for i in range(self.num_points)]
+        self.plot_objects = [Object(ghost_length=ghost_length, 
+                                    scale_factor=scale_factor, 
+                                    resolution=resolution) 
+                                    for i in range(self.num_points)]
         ######################################################
         
         self.objects = None
@@ -131,9 +134,13 @@ if __name__ == '__main__':
                         help="number of ghost frames to display for each object")
     parser.add_option("--scale-factor", type="float", dest="scale_factor", default=0.01,
                         help="scale factor for the glyphs used in the 3D plot objects")
+    parser.add_option("--resolution", type="int", dest="resolution", default=4,
+                        help="resolution for glyphs: use default=4 for realtime apps")
     
     (options, args) = parser.parse_args()
         
     viewer = Viewer(stim_xml_filename=options.stim_xml_filename,
                     num_points=options.num_points,
-                    scale_factor=options.scale_factor)
+                    scale_factor=options.scale_factor,
+                    ghost_length=options.ghost_length,
+                    resolution=options.resolution)
